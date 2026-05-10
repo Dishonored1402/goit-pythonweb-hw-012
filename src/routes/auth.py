@@ -1,12 +1,19 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Security
+import os
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from src.database.db import get_db
 from src.schemas import UserSchema, UserResponse, TokenModel
 from src.repository import users as repository_users
 from src.services.auth import auth_service
+from src.services.email import send_email
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+import cloudinary
+import cloudinary.uploader
 
 router = APIRouter(prefix='/auth', tags=["auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(body: UserSchema, db: Session = Depends(get_db)):
@@ -29,3 +36,35 @@ async def login(body: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
     refresh_token = await auth_service.create_refresh_token(data={"sub": user.email})
     await repository_users.update_token(user, refresh_token, db)
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=UserResponse)
+@limiter.limit("5/minute")
+async def read_users_me(request: Request, current_user: repository_users.User = Depends(auth_service.get_current_user)):
+    return current_user
+
+@router.get("/confirmed_email/{token}")
+async def confirmed_email(token: str, db: Session = Depends(get_db)):
+    email = await auth_service.get_email_from_token(token)
+    user = await repository_users.get_user_by_email(email, db)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification error")
+    if user.confirmed:
+        return {"message": "Your email is already confirmed"}
+    await repository_users.confirmed_email(email, db)
+    return {"message": "Email confirmed"}
+
+@router.patch('/avatar', response_model=UserResponse)
+async def update_avatar_user(file: UploadFile = File(), 
+                             current_user: repository_users.User = Depends(auth_service.get_current_user), 
+                             db: Session = Depends(get_db)):
+    cloudinary.config(
+        cloud_name=os.getenv('CLOUDINARY_NAME'),
+        api_key=os.getenv('CLOUDINARY_API_KEY'),
+        api_secret=os.getenv('CLOUDINARY_API_SECRET'),
+        secure=True
+    )
+    r = cloudinary.uploader.upload(file.file, public_id=f'Avatars/{current_user.username}', overwrite=True)
+    src_url = cloudinary.CloudinaryImage(f'Avatars/{current_user.username}')\
+                        .build_url(width=250, height=250, crop='fill', version=r.get('version'))
+    user = await repository_users.update_avatar(current_user.email, src_url, db)
+    return user

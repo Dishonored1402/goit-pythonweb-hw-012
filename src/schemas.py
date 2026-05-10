@@ -36,7 +36,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str
-    avatar: str
+    avatar: Optional[str] = None
+    confirmed: bool = False
 
     class Config:
         from_attributes = True

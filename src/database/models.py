@@ -10,7 +10,7 @@ class User(Base):
     password = Column(String(255), nullable=False)
     avatar = Column(String(255), nullable=True)
     refresh_token = Column(String(255), nullable=True)
-    confirmed = Column(Boolean, default=False)  # для верифікації пошти
+    confirmed = Column(Boolean, default=False)
 
 class Contact(Base):
     __tablename__ = "contacts"

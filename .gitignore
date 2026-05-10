@@ -4,13 +4,24 @@ __pycache__/
 *$py.class
 venv/
 .venv/
+env/
 
-# Environment variables
+# Environment
 .env
+.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# Docker
+.dockerignore
 
 # IDE
 .vscode/
 .idea/
+*.swp
 
-# Database
-*.db
+# OS
+.DS_Store
+Thumbs.db
