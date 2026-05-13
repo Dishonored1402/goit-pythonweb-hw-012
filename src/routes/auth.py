@@ -6,15 +6,19 @@ import cloudinary
 import cloudinary.uploader
 
 from src.database.db import get_db
-from src.schemas import UserSchema, UserResponse, TokenModel
+from src.database.models import User, Role
+from src.schemas import UserSchema, UserResponse, TokenModel, RequestEmail, ResetPasswordModel
 from src.repository import users as repository_users
 from src.services.auth import auth_service
 from src.services.email import send_email
+from src.services.roles import RoleChecker
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 router = APIRouter(prefix='/auth', tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
+
+allowed_get_avatar = RoleChecker([Role.admin])
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(body: UserSchema, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)):
@@ -24,8 +28,8 @@ async def signup(body: UserSchema, background_tasks: BackgroundTasks, request: R
     
     body.password = auth_service.get_password_hash(body.password)
     new_user = await repository_users.create_user(body, db)
-    
-    host = "http://localhost:8000" 
+
+    host = str(request.base_url)
     background_tasks.add_task(send_email, new_user.email, new_user.username, host)
     
     return new_user
@@ -61,12 +65,12 @@ async def confirmed_email(token: str, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 @limiter.limit("5/minute")
-async def read_users_me(request: Request, current_user: repository_users.User = Depends(auth_service.get_current_user)):
+async def read_users_me(request: Request, current_user: User = Depends(auth_service.get_current_user)):
     return current_user
 
-@router.patch('/avatar', response_model=UserResponse)
+@router.patch('/avatar', response_model=UserResponse, dependencies=[Depends(allowed_get_avatar)])
 async def update_avatar_user(file: UploadFile = File(), 
-                             current_user: repository_users.User = Depends(auth_service.get_current_user), 
+                             current_user: User = Depends(auth_service.get_current_user), 
                              db: Session = Depends(get_db)):
     cloudinary.config(
         cloud_name=os.getenv('CLOUDINARY_NAME'),
@@ -79,3 +83,32 @@ async def update_avatar_user(file: UploadFile = File(),
                         .build_url(width=250, height=250, crop='fill', version=r.get('version'))
     user = await repository_users.update_avatar(current_user.email, src_url, db)
     return user
+
+@router.post("/forgot_password")
+async def forgot_password(
+    body: RequestEmail,
+    db: Session = Depends(get_db)
+):
+    user = await repository_users.get_user_by_email(body.email, db)
+    if user:
+        reset_token = auth_service.create_reset_token(user.email)
+        return {
+            "message": "Use this token to reset password",
+            "reset_token": reset_token
+        }
+
+    return {"message": "Check your email for a password reset link."}
+
+
+@router.post("/reset_password/{token}")
+async def reset_password(token: str, body: ResetPasswordModel, db: Session = Depends(get_db)):
+    email = await auth_service.get_email_from_reset_token(token)
+    user = await repository_users.get_user_by_email(email, db)
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification error")
+
+    new_password_hash = auth_service.get_password_hash(body.new_password)
+    await repository_users.update_password(user, new_password_hash, db)
+
+    return {"message": "Password updated successfully"}

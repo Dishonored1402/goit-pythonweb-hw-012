@@ -1,6 +1,11 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Boolean
+import enum
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, Boolean, Enum
 from sqlalchemy.orm import relationship
 from src.database.db import Base
+
+class Role(str, enum.Enum):
+    admin = "admin"
+    user = "user"
 
 class User(Base):
     __tablename__ = "users"
@@ -11,6 +16,7 @@ class User(Base):
     avatar = Column(String(255), nullable=True)
     refresh_token = Column(String(255), nullable=True)
     confirmed = Column(Boolean, default=False)
+    role = Column(Enum(Role), default=Role.user)
 
 class Contact(Base):
     __tablename__ = "contacts"

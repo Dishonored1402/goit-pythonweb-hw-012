@@ -1,6 +1,7 @@
 from datetime import date
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from src.database.models import Role
 
 class ContactBase(BaseModel):
     first_name: str = Field(max_length=50)
@@ -23,9 +24,7 @@ class ContactUpdate(BaseModel):
 
 class ContactResponse(ContactBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class UserSchema(BaseModel):
     username: str = Field(min_length=3, max_length=50)
@@ -38,11 +37,16 @@ class UserResponse(BaseModel):
     email: str
     avatar: Optional[str] = None
     confirmed: bool = False
-
-    class Config:
-        from_attributes = True
+    role: Role
+    model_config = ConfigDict(from_attributes=True)
 
 class TokenModel(BaseModel): 
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+class RequestEmail(BaseModel):
+    email: EmailStr
+
+class ResetPasswordModel(BaseModel):
+    new_password: str = Field(min_length=6, max_length=12)

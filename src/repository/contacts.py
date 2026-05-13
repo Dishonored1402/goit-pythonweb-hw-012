@@ -1,10 +1,23 @@
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from fastapi import HTTPException, status
 from src.database.models import Contact, User
 from src.schemas import ContactCreate, ContactUpdate
 
+
 async def get_contacts(skip: int, limit: int, name: str, last_name: str, email: str, user: User, db: Session):
+    """Get a list of contacts with optional filters.
+
+    :param skip: Number of records to skip.
+    :param limit: Maximum number of records to return.
+    :param name: Filter by first name (partial match).
+    :param last_name: Filter by last name (partial match).
+    :param email: Filter by email (partial match).
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: List of Contact objects.
+    """
     query = db.query(Contact).filter(Contact.user_id == user.id)
     if name:
         query = query.filter(Contact.first_name.ilike(f"%{name}%"))
@@ -14,18 +27,56 @@ async def get_contacts(skip: int, limit: int, name: str, last_name: str, email: 
         query = query.filter(Contact.email.ilike(f"%{email}%"))
     return query.offset(skip).limit(limit).all()
 
+
+async def search_contacts(query: str, user: User, db: Session):
+    """Search contacts by first name, last name or email using OR logic.
+
+    :param query: Search string.
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: List of matching Contact objects.
+    """
+    db_query = db.query(Contact).filter(Contact.user_id == user.id)
+    if query:
+        db_query = db_query.filter(
+            or_(
+                Contact.first_name.ilike(f"%{query}%"),
+                Contact.last_name.ilike(f"%{query}%"),
+                Contact.email.ilike(f"%{query}%")
+            )
+        )
+    return db_query.limit(100).all()
+
+
 async def create_contact(body: ContactCreate, user: User, db: Session):
+    """Create a new contact for the current user.
+
+    :param body: Contact creation data.
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: Newly created Contact object.
+    :raises HTTPException: If email already exists in user's contacts.
+    """
     existing_contact = db.query(Contact).filter(Contact.email == body.email, Contact.user_id == user.id).first()
     if existing_contact:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists in your contacts")
-    
+
     contact = Contact(**body.model_dump(), user_id=user.id)
     db.add(contact)
     db.commit()
     db.refresh(contact)
     return contact
 
+
 async def update_contact(contact_id: int, body: ContactUpdate, user: User, db: Session):
+    """Update an existing contact.
+
+    :param contact_id: ID of the contact to update.
+    :param body: Updated contact data.
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: Updated Contact object or None if not found.
+    """
     contact = db.query(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id).first()
     if contact:
         update_data = body.model_dump(exclude_unset=True)
@@ -35,10 +86,17 @@ async def update_contact(contact_id: int, body: ContactUpdate, user: User, db: S
         db.refresh(contact)
     return contact
 
+
 async def get_upcoming_birthdays(user: User, db: Session):
+    """Get contacts with birthdays in the next 7 days.
+
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: List of Contact objects with upcoming birthdays.
+    """
     today = datetime.today().date()
     next_week = today + timedelta(days=7)
-    
+
     contacts = db.query(Contact).filter(Contact.user_id == user.id).all()
     upcoming = []
     for contact in contacts:
@@ -47,15 +105,31 @@ async def get_upcoming_birthdays(user: User, db: Session):
                 bday_this_year = contact.birthday.replace(year=today.year)
             except ValueError:
                 bday_this_year = contact.birthday.replace(year=today.year, day=28)
-                
+
             if today <= bday_this_year <= next_week:
                 upcoming.append(contact)
     return upcoming
 
+
 async def get_contact(contact_id: int, user: User, db: Session):
+    """Get a single contact by ID.
+
+    :param contact_id: ID of the contact.
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: Contact object or None.
+    """
     return db.query(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id).first()
 
+
 async def remove_contact(contact_id: int, user: User, db: Session):
+    """Delete a contact by ID.
+
+    :param contact_id: ID of the contact to delete.
+    :param user: Current authenticated user.
+    :param db: Database session.
+    :return: Deleted Contact object or None if not found.
+    """
     contact = db.query(Contact).filter(Contact.id == contact_id, Contact.user_id == user.id).first()
     if contact:
         db.delete(contact)

@@ -14,8 +14,9 @@ env/
 *.db
 *.sqlite3
 
-# Docker
-.dockerignore
+# Documentation
+docs/_build/
+docs_output/
 
 # IDE
 .vscode/

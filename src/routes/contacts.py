@@ -20,6 +20,16 @@ async def read_upcoming_birthdays(db: Session = Depends(get_db),
                                   current_user: User = Depends(auth_service.get_current_user)):
     return await repository_contacts.get_upcoming_birthdays(current_user, db)
 
+@router.get("/search/", response_model=list[ContactResponse])
+async def search_contacts(
+    query: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth_service.get_current_user)
+):
+    """Search contacts by name, last name or email using a single query string."""
+    contacts = await repository_contacts.search_contacts(query, current_user, db)
+    return contacts
+
 @router.get("/{contact_id}", response_model=ContactResponse)
 async def read_contact(contact_id: int, db: Session = Depends(get_db), 
                         current_user: User = Depends(auth_service.get_current_user)):
