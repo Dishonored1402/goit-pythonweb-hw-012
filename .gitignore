@@ -2,27 +2,45 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+
+# Virtual environments
 venv/
 .venv/
 env/
 
-# Environment
+# Environment variables
 .env
-.env.example
+.env.*
+!.env.example
 
-# Database
+# Database files
 *.db
 *.sqlite3
+*.sqlite
 
-# Documentation
+# Test / coverage
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+
+# Documentation build
 docs/_build/
 docs_output/
 
-# IDE
+# Temporary review files
+review_files/
+review_files.zip
+review_files_final.zip
+
+# IDE / editors
 .vscode/
 .idea/
 *.swp
+*.swo
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db

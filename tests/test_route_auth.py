@@ -99,3 +99,55 @@ def test_forgot_password(client):
     )
     assert response.status_code == 200
     assert "message" in response.json()
+
+
+def test_avatar_update_forbidden_for_regular_user(client):
+    login_response = client.post(
+        "/api/auth/login",
+        data={"username": "newuser@example.com", "password": "password123"},
+    )
+    token = login_response.json()["access_token"]
+
+    response = client.patch(
+        "/api/auth/avatar",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("avatar.png", b"fake-image", "image/png")},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Operation forbidden: insufficient permissions"
+
+
+def test_forgot_password_returns_reset_token(client):
+    response = client.post(
+        "/api/auth/forgot_password",
+        json={"email": "newuser@example.com"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "reset_token" in data
+    assert data["message"] == "Use this token to reset password"
+
+
+def test_reset_password_success(client):
+    forgot_response = client.post(
+        "/api/auth/forgot_password",
+        json={"email": "newuser@example.com"}
+    )
+    reset_token = forgot_response.json()["reset_token"]
+
+    response = client.post(
+        f"/api/auth/reset_password/{reset_token}",
+        json={"new_password": "newpass123"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password updated successfully"
+
+    login_response = client.post(
+        "/api/auth/login",
+        data={"username": "newuser@example.com", "password": "newpass123"},
+    )
+    assert login_response.status_code == 200
+    assert "access_token" in login_response.json()
